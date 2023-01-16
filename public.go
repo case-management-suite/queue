@@ -2,12 +2,13 @@ package queue
 
 import (
 	"github.com/case-management-suite/common/config"
+	"github.com/case-management-suite/common/service"
 	"github.com/case-management-suite/queue/adapters/gochan"
 	"github.com/case-management-suite/queue/adapters/rabbitmq"
 	"github.com/case-management-suite/queue/api"
 )
 
-type QueueServiceConstructor = func(config.QueueConnectionConfig, config.LogConfig) api.QueueService
+type QueueServiceConstructor = func(config.QueueConnectionConfig, service.ServiceUtils) api.QueueService
 
 func QueueServiceFactory(t config.QueueType) QueueServiceConstructor {
 	switch t {
@@ -16,7 +17,7 @@ func QueueServiceFactory(t config.QueueType) QueueServiceConstructor {
 	case config.GoChannels:
 		return gochan.NewStubQueueService
 	default:
-		return func(qcc config.QueueConnectionConfig, lc config.LogConfig) api.QueueService {
+		return func(qcc config.QueueConnectionConfig, _ service.ServiceUtils) api.QueueService {
 			panic("Unimplemented QueueType")
 		}
 	}

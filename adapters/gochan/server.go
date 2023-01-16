@@ -175,7 +175,8 @@ func (s *ChanServer) Push(ctx context.Context, channel string, delivery api.Deli
 }
 
 func (s *ChanServer) Stop() {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	s.IsStarted = false
 	for k, v := range s.Clients {
 		for _, c := range v {

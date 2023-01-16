@@ -6,6 +6,7 @@ import (
 
 	"github.com/case-management-suite/common/config"
 	"github.com/case-management-suite/common/ctxutils"
+	"github.com/case-management-suite/common/service"
 	"github.com/case-management-suite/queue/api"
 	"github.com/rs/zerolog"
 )
@@ -64,12 +65,12 @@ func (s *StubQueue) PurgeAllChannels() (int, error) {
 	return 0, nil
 }
 
-func NewStubQueueService(conf config.QueueConnectionConfig, logConfig config.LogConfig) api.QueueService {
+func NewStubQueueService(_ config.QueueConnectionConfig, _ service.ServiceUtils) api.QueueService {
 	s := StubQueue{}
 	return &s
 }
 
-func NewStubQueueServiceForTests(conf config.QueueConnectionConfig, simulateConnectionError bool) api.QueueService {
+func NewStubQueueServiceForTests(_ config.QueueConnectionConfig, simulateConnectionError bool) api.QueueService {
 	s := StubQueue{SimulareConnectionError: simulateConnectionError}
 	return &s
 }

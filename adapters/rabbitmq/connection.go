@@ -4,15 +4,15 @@ import (
 	"context"
 	"time"
 
+	"github.com/case-management-suite/common/logger"
 	"github.com/case-management-suite/common/utils"
 	"github.com/case-management-suite/queue/api"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rs/zerolog"
 )
 
 const RETRY_TIME = 2 * time.Second
 
-func connectWithRetry(ctx context.Context, address string, retries int, channels []Channel, logger zerolog.Logger) (*amqp.Connection, *amqp.Channel, error) {
+func connectWithRetry(ctx context.Context, address string, retries int, channels []Channel, logger logger.Logger) (*amqp.Connection, *amqp.Channel, error) {
 	var connected bool = false
 	var connection *amqp.Connection
 	var channel *amqp.Channel
@@ -35,7 +35,7 @@ loop:
 	return connection, channel, err
 }
 
-func connect(c api.ConnectionInfo, channels []Channel, logger zerolog.Logger) (*amqp.Connection, *amqp.Channel, error) {
+func connect(c api.ConnectionInfo, channels []Channel, logger logger.Logger) (*amqp.Connection, *amqp.Channel, error) {
 	conn, err := amqp.Dial(c.Address)
 	if err != nil {
 		return nil, nil, err

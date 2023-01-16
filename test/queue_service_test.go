@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/case-management-suite/common/config"
+	"github.com/case-management-suite/common/service"
 	"github.com/case-management-suite/common/utils"
 	"github.com/case-management-suite/queue"
 	"github.com/case-management-suite/testutil"
@@ -42,7 +43,7 @@ func TestSendAndReceiveN(t *testing.T) {
 			channel := "testchannel3"
 			appConfig := config.NewLocalAppConfig()
 			newQueueService := queue.QueueServiceFactory(testData.adapter)
-			service := newQueueService(appConfig.RulesServiceConfig.QueueConfig, appConfig.LogConfig)
+			service := newQueueService(appConfig.RulesServiceConfig.QueueConfig, service.NewTestServiceUtils())
 			defer func() {
 				log.Info().Msg("Closing service...")
 				defer service.Close()
@@ -121,7 +122,7 @@ func TestSendAndReceiveNWithTimeout(t *testing.T) {
 			channel := "testchannel3"
 			appConfig := config.NewLocalAppConfig()
 			newQueueService := queue.QueueServiceFactory(testData.adapter)
-			service := newQueueService(appConfig.RulesServiceConfig.QueueConfig, appConfig.LogConfig)
+			service := newQueueService(appConfig.RulesServiceConfig.QueueConfig, service.NewTestServiceUtils())
 
 			defer func() {
 				log.Info().Msg("Closing service...")

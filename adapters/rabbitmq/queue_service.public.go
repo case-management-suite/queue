@@ -11,15 +11,14 @@ import (
 
 	"github.com/case-management-suite/common/config"
 	"github.com/case-management-suite/common/ctxutils"
+	"github.com/case-management-suite/common/service"
 	"github.com/case-management-suite/queue/api"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rs/zerolog"
 )
 
 type QueueService struct {
 	addr          string
-	logger        zerolog.Logger
 	connection    *amqp.Connection
 	channel       *amqp.Channel
 	done          chan os.Signal
@@ -28,9 +27,9 @@ type QueueService struct {
 	isConnected   bool
 	alive         bool
 	threads       int
-	consumerNames []string
 	wg            *sync.WaitGroup
 	channels      []string
+	service.ServiceUtils
 }
 
 func (c *QueueService) Connect(ctx context.Context, channels []string) error {
@@ -51,7 +50,7 @@ func (c *QueueService) Close() error {
 		return nil
 	}
 	c.alive = false
-	c.logger.Debug().Msg("Waiting for current messages to be processed...")
+	c.Logger.Debug().Msg("Waiting for current messages to be processed...")
 
 	// c.wg.Wait()
 	err := c.channel.Close()
@@ -63,7 +62,7 @@ func (c *QueueService) Close() error {
 		return err
 	}
 	c.isConnected = false
-	c.logger.Info().Msg("gracefully stopped rabbitMQ connection")
+	c.Logger.Info().Msg("gracefully stopped rabbitMQ connection")
 	return nil
 }
 
@@ -72,7 +71,7 @@ func (c *QueueService) Listen(channel api.Channel, cancelContext context.Context
 	// mu := sync.Mutex{}
 
 	c.wg.Add(c.threads)
-	c.logger.Debug().Int("threads", c.threads).Msg("Starting threads")
+	c.Logger.Debug().Int("threads", c.threads).Msg("Starting threads")
 	cname := uuid.NewString()
 	msgs, err := c.registerConsumer(channel, cname)
 	if err != nil {
@@ -112,9 +111,9 @@ func (c *QueueService) Listen(channel api.Channel, cancelContext context.Context
 }
 
 func (c *QueueService) Send(cxt context.Context, channel Channel, p []byte, retries int) error {
-	connection, ch, err := connectWithRetry(cxt, c.addr, 3, c.channels, c.logger)
+	connection, ch, err := connectWithRetry(cxt, c.addr, 3, c.channels, c.Logger)
 	if err != nil {
-		c.logger.Err(err).Msg("Failed to push to queue")
+		c.Logger.Err(err).Msg("Failed to push to queue")
 	}
 
 	defer connection.Close()
@@ -122,7 +121,7 @@ func (c *QueueService) Send(cxt context.Context, channel Channel, p []byte, retr
 
 	for {
 		retries := 20
-		c.logger.Debug().Str("channel", channel).Msg("Pushing...")
+		c.Logger.Debug().Str("channel", channel).Msg("Pushing...")
 		notifyError, notifyConfirm := preparePush(ch)
 		err := unsafePush(cxt, ch, api.Delivery{Meta: api.QueueMeta{Channel: api.Channel(channel)}, Body: p})
 		if err != nil {
@@ -141,7 +140,7 @@ func (c *QueueService) Send(cxt context.Context, channel Channel, p []byte, retr
 		select {
 		case confirm := <-notifyConfirm:
 			if confirm.Ack {
-				c.logger.Debug().Msg("Pushed aknowledged")
+				c.Logger.Debug().Msg("Pushed aknowledged")
 				return nil
 			}
 		case <-time.After(resendDelay):
@@ -158,13 +157,13 @@ func (c *QueueService) GetConnectionInfo() api.ConnectionInfo {
 func (c *QueueService) PurgeAllChannels() (int, error) {
 	conn, err := amqp.Dial(c.addr)
 	if err != nil {
-		c.logger.Printf("failed to dial rabbitMQ server: %v", err)
+		c.Logger.Printf("failed to dial rabbitMQ server: %v", err)
 		return 0, err
 	}
 	defer conn.Close()
 	channel, err := conn.Channel()
 	if err != nil {
-		c.logger.Printf("failed connecting to channel: %v", err)
+		c.Logger.Printf("failed connecting to channel: %v", err)
 		return 0, err
 	}
 	defer channel.Close()
@@ -174,7 +173,7 @@ func (c *QueueService) PurgeAllChannels() (int, error) {
 	for _, ch := range c.channels {
 		purged, err := channel.QueuePurge(ch, false)
 		if err != nil {
-			c.logger.Printf("failed to purge stream queue: %v", err)
+			c.Logger.Printf("failed to purge stream queue: %v", err)
 			return allPurged, err
 		}
 		allPurged += purged
@@ -183,7 +182,7 @@ func (c *QueueService) PurgeAllChannels() (int, error) {
 	return allPurged, nil
 }
 
-func NewQueueService(queueConfig config.QueueConnectionConfig, logConfig config.LogConfig) api.QueueService {
+func NewQueueService(queueConfig config.QueueConnectionConfig, su service.ServiceUtils) api.QueueService {
 	threads := runtime.GOMAXPROCS(0)
 	if numCPU := runtime.NumCPU(); numCPU > threads {
 		threads = numCPU
@@ -192,15 +191,15 @@ func NewQueueService(queueConfig config.QueueConnectionConfig, logConfig config.
 
 	goChan := make(chan os.Signal, 1)
 	// l := log.Output(zerolog.ConsoleWriter{Out: os.Stderr}).Level(queueConfig.LogLevel).With().Logger()
-	l := logConfig.Logger.Level(logConfig.QueueService).With().Str("service", "QueueService").Logger()
+	// logConfig.Logger.ConfigForService("QueueService", queueConfig.LogLevel)
 
 	r := QueueService{
-		addr:    queueConfig.Address,
-		logger:  l,
-		threads: threads,
-		done:    goChan,
-		alive:   true,
-		wg:      &sync.WaitGroup{},
+		addr:         queueConfig.Address,
+		threads:      threads,
+		done:         goChan,
+		alive:        true,
+		wg:           &sync.WaitGroup{},
+		ServiceUtils: su,
 	}
 
 	return &r

@@ -2,7 +2,6 @@ package rabbitmq
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/case-management-suite/common/utils"
@@ -12,7 +11,7 @@ import (
 )
 
 func (c *QueueService) connect(ctx context.Context) error {
-	connection, channel, err := connectWithRetry(ctx, c.addr, 3, c.channels, c.logger)
+	connection, channel, err := connectWithRetry(ctx, c.addr, 3, c.channels, c.Logger)
 	if err != nil {
 		return err
 	}
@@ -29,7 +28,7 @@ func (c *QueueService) changeConnection(connection *amqp.Connection, channel *am
 	c.notifyConfirm = make(chan amqp.Confirmation)
 	c.channel.NotifyClose(c.notifyClose)
 	c.channel.NotifyPublish(c.notifyConfirm)
-	c.logger.Debug().Msg("Reconnected")
+	c.Logger.Debug().Msg("Reconnected")
 	c.isConnected = true
 }
 
@@ -39,7 +38,7 @@ func (c *QueueService) handleReconnect() {
 	for c.alive {
 		// c.isConnected = false
 		t := time.Now()
-		c.logger.Info().Caller().Str("address", c.addr).Msg("Attempting to connect to rabbitMQ")
+		c.Logger.Info().Caller().Str("address", c.addr).Msg("Attempting to connect to rabbitMQ")
 		var retryCount int
 
 		for !c.isConnected {
@@ -51,11 +50,11 @@ func (c *QueueService) handleReconnect() {
 			case <-c.done:
 				return
 			case <-time.After(reconnectDelay + time.Duration(retryCount)*time.Second):
-				c.logger.Error().Err(err).Msg("disconnected from rabbitMQ and failed to connect")
+				c.Logger.Error().Err(err).Msg("disconnected from rabbitMQ and failed to connect")
 				retryCount++
 			}
 		}
-		c.logger.Printf("Connected to rabbitMQ in: %vms", time.Since(t).Milliseconds())
+		c.Logger.Printf("Connected to rabbitMQ in: %vms", time.Since(t).Milliseconds())
 		select {
 		case <-c.done:
 			return
@@ -67,16 +66,12 @@ func (c *QueueService) handleReconnect() {
 func (c *QueueService) waitForConnection(ctx context.Context, channel api.Channel) {
 	for {
 		if c.isConnected {
-			c.logger.Debug().Str("channel", channel).Msg("Connected to listener")
+			c.Logger.Debug().Str("channel", channel).Msg("Connected to listener")
 			break
 		}
 		time.Sleep(1 * time.Second)
-		c.logger.Debug().Interface("context", ctx.Value(utils.ServiceName)).Msg("Waiting for a connection")
+		c.Logger.Debug().Interface("context", ctx.Value(utils.ServiceName)).Msg("Waiting for a connection")
 	}
-}
-
-func (c *QueueService) consumerName(cname string, i int) string {
-	return fmt.Sprintf("go-consumer-%s_%v", cname, i)
 }
 
 func (c *QueueService) registerConsumer(channel Channel, consumerName string) (<-chan amqp.Delivery, error) {
@@ -111,22 +106,20 @@ func (c *QueueService) mapMessagesChannel(queueCtx QueueConsumerContext) api.Que
 	recch := make(chan bool, 1)
 
 	go func() {
-		defer func() {
-			log.Debug().Msg("Exiting the channel broker")
-		}()
+		defer c.Logger.Info().Msg("Stopping mapping")
 		for {
-			if c.isConnected {
-				c.logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Waiting for messages...")
-			}
+			// if c.isConnected {
+			// 	// c.Logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Waiting for messages...")
+			// }
 			select {
 			case <-ctx.Done():
-				c.logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Context cancelled")
+				c.Logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Context cancelled")
 				donech <- true
 				return
 			case msg, ok := <-msgs:
 
 				if !ok {
-					c.logger.Debug().Msg("could not fetch message. Waiting trying...")
+					c.Logger.Debug().Msg("could not fetch message. Waiting trying...")
 					time.Sleep(1 * time.Second)
 					nmsgs, err := c.registerConsumer(channel, consumer)
 					if err == nil {
@@ -134,22 +127,20 @@ func (c *QueueService) mapMessagesChannel(queueCtx QueueConsumerContext) api.Que
 						msgs = nmsgs
 						recch <- true
 					} else {
-						c.logger.Debug().Err(err).Msg("Could not re-register consumer")
+						c.Logger.Debug().Err(err).Msg("Could not re-register consumer")
 					}
 					continue
-				} else {
-					c.logger.Debug().Bool("ok", ok).Msg("Got msg")
 				}
 				parsed, err := NewAmqpDelivery(msg)
 
 				if err != nil {
-					c.logger.Debug().Err(err).Msg("Error handing event")
+					c.Logger.Debug().Err(err).Msg("Error handing event")
 					errch <- err
 					return
 				}
 				outch <- parsed
 			case <-c.notifyClose:
-				c.logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Notify close. Requeueing pending mesagges")
+				c.Logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Notify close. Requeueing pending mesagges")
 
 			innerFor:
 				for {
@@ -163,7 +154,7 @@ func (c *QueueService) mapMessagesChannel(queueCtx QueueConsumerContext) api.Que
 						break innerFor
 					}
 				}
-				c.logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Requeuing succesful")
+				c.Logger.Debug().Str("cname", consumer).Str("channel", channel).Msg("Requeuing succesful")
 
 				donech <- true
 			}
